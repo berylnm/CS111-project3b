@@ -12,12 +12,16 @@ first_unreserved_block = 0
 first_unreserved_inode = 0
 
 # for block status block_status[i]
-# i[0] = -2 if the block has been determined as duplicate at least once
-# i[0] = -1 if unvisited by any function (i.e. reserved)
-# i[0] = 0 if the block is on the freelist
-# i[0] > 0 if the block is in use, in this case, i[0] = inode number, i[1] = block offset, i[2] = block type
+# block_status[i][0] = -2 if the block has been determined as duplicate at least once
+# block_status[i][0] = -1 if unvisited by any function (i.e. reserved)
+# block_status[i][0] = 0 if the block is on the freelist
+# block_status[i][0] > 0 if the block is in use, in this case, block_status[i][0] = inode number, block_status[i][1] = block offset, block_status[i][2] = block type
 block_status = []
 inode_status = []
+
+par_inode = 0
+RFinode = 0
+name = 0
 
 exit_status = 0
 
@@ -37,36 +41,35 @@ def constraints(line):
 	global first_unreserved_block
 	global first_unreserved_inode
 	
-	fd = open(file, "r")
-	for line in fd:
-		if "SUPERBLOCK" in line:
-			# split the line for read
-			s_line = line.split(",",8)
 
-			# meta data
-			total_block = int(s_line[1])
-			total_inode = int(s_line[2])
-			block_size = int(s_line[3])
-			inode_size = int(s_line[4])
-			first_unreserved_inode = int(s_line[7])
+	if "SUPERBLOCK" in line:
+		# split the line for read
+		s_line = line.split(",",8)
 
-			# initialize blocks
-			block_status = [[(-1) for i in range(3)] for j in range(total_block)]
+		# meta data
+		total_block = int(s_line[1])
+		total_inode = int(s_line[2])
+		block_size = int(s_line[3])
+		inode_size = int(s_line[4])
+		first_unreserved_inode = int(s_line[7])
 
-			# initialize inodes
-			inode_status = [[-2, 0, 0] for j in range(0, first_unreserved_inode)]
-			inode_status = [[-1, 0, 0] for j in range(first_unreserved_inode, total_inode)]
+		# initialize blocks
+		block_status = [[(-1) for i in range(3)] for j in range(total_block)]
 
-		elif "GROUP" in line:
-			s_line = line.split(",",9)
-			first_unreserved_block = int(line[8]) + math.ceil(float(inode_size) * total_inode / total_block)
+		# initialize inodes
+		inode_status = [[-2, 0, 0] for j in range(0, first_unreserved_inode)]
+		inode_status = [[-1, 0, 0] for j in range(first_unreserved_inode, total_inode)]
 
-		elif "BFREE" in line:
-			s_line = line.split(",")
-			block_status[int(s_line[1])][0] = 0	
-		elif "IFREE" in line:
-			s_line = line.split(",")
-			block_status[int(s_line[1])][0] = 0		
+	elif "GROUP" in line:
+		s_line = line.split(",",9)
+		first_unreserved_block = int(line[8]) + math.ceil(float(inode_size) * total_inode / total_block)
+
+	elif "BFREE" in line:
+		s_line = line.split(",")
+		block_status[int(s_line[1])][0] = 0	
+	elif "IFREE" in line:
+		s_line = line.split(",")
+		block_status[int(s_line[1])][0] = 0		
 
 # usage: after iterating through the constraint, pass each encountered block to this module
 # input: see from variable name 
@@ -142,6 +145,30 @@ def unreferenced blocks():
 			exit_status = 2
 			print("UNREFERENCED BLOCK {0}".format(i))
 
+def Directory_Consistency_Audits(RFinode, par_inode, name):
+	
+	global exit_status
+
+	if (RFinode > 0) and (RFinode <= total_inode):
+		if (inode_status[RFinode - 1][0] > 0):
+			inode_status[RFinode - 1][1] += 1
+			if (inode_size[RFinode - 1][2] == 0):
+				inode_status[RFinode - 1][2] = par_inode
+		elif (inode_status[RFinode - 1][0] == 0):
+			exit_status = 2
+			print "DIRECTORY INODE {} NAME {} UNALLOCATED INODE {}".format(par_inode, name, RFinode)
+	else:
+		exit_status = 2
+		print "DIRECTORY INODE {} NAME {} INVALID INODE {}".format(par_inode, name, RFinode)
+
+	if (name == '.'):
+		if (par_inode != RFinode):
+			exit_status = 2
+			print "DIRECTORY INODE {} NAME '.' LINK TO INODE {} SHOULD BE {}".format(par_inode, RFinode, par_inode)
+	elif (name == '..'):
+		if (RFinode != inode_status[par_inode - 1][2]):
+			exit_status = 2
+			print "DIRECTORY INODE {} NAME '..' LINK TO INODE {} SHOULD BE {}".format(par_inode, RFinode, inode_status[par_inode - 1][2])
 
 def main():
 	global exit_status
@@ -155,8 +182,17 @@ def main():
 		for line in file:
 			if "SUPERBLOCK" in line or "GROUP" in line or "BFREE" in line or "IFREE" in line:
 				constraints(line)
+		for line in file:
 			if "INODE" in line:
 				parse_inode(line)
+			if "DIRENT" in line:
+				s_line = line.split(",")
+				par_inode = int(s_line[1])
+   				RFinode = int(s_line[3])
+   				name = int(s_line[6])
 
+				Directory_Consistency_Audits(RFinode, par_inode, name)
+
+	# exit status should be updated during execution
 	sys.exit(exit_status)
 
