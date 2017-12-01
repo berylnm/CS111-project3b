@@ -94,13 +94,29 @@ def invalid_block(blcok_num, block_type, inode, offset):
 	else:
 		exit_status = 0
 
-# not finished, should do block check and inode check here
+# do block check and inode check here
 def parse_inode(line)
 	
 	global exit_status
 	s_line = line.split(",")
 
-	inode_num = s_line[1]
+	inode_num = int(s_line[1])
+	invalid_inode(inode_num)
+
+	for i in range(0, 15):
+		block_num = int(s_line[12]) + i
+		if i < 12:
+			offset = i
+			invalid_block(block_num, "BLOCK", inode_num, offset)
+		elif i == 12:
+			offset = i
+			invalid_block(block_num, "INDIRECT BLOCK", inode_num, offset)
+		elif i == 13:
+			offset = 268
+			invalid_block(block_num, "DOUBLE INDIRECT BLOCK", inode_num, offset)
+		elif i == 14:
+			offset = 65804
+			invalid_block(block_num, "DOUBLE INDIRECT BLOCK", inode_num, offset)
 
 # check if the inode is valid
 def invalid_inode(inode)
