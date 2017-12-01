@@ -144,14 +144,19 @@ def unreferenced blocks():
 
 
 def main():
-	root_dir = '.'
+	global exit_status
 
-	for files in os.listdir(root_dir):
-		for file in files:
-			if (file.endswith(".csv")):
-				for line in file:
-					if "SUPERBLOCK" in line or "GROUP" in line or "BFREE" in line or "IFREE" in line:
-						constraints(line)
-					if "INODE" in line:
-						parse_inode(line)
+	if len(sys.argv) != 2
+		sys.stderr.write("Usage: python lab3b [file name]")
+		exit_status = 1
+		sys.exit(exit_status)
+
+	file = sys.argv[1]
+		for line in file:
+			if "SUPERBLOCK" in line or "GROUP" in line or "BFREE" in line or "IFREE" in line:
+				constraints(line)
+			if "INODE" in line:
+				parse_inode(line)
+
+	sys.exit(exit_status)
 
