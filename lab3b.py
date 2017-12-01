@@ -9,10 +9,15 @@ block_size = 0
 inode_size = 0
 
 first_unreserved_block = 0
+first_unreserved_inode = 0
 
 # for block status block_status[i]
-# i[0] = exists on free list, i[1] = referenced 
+# i[0] = -2 if the block has been determined as duplicate at least once
+# i[0] = -1 if unvisited by any function (i.e. reserved)
+# i[0] = 0 if the block is on the freelist
+# i[0] > 0 if the block is in use, in this case, i[0] = inode number, i[1] = block offset, i[2] = block type
 block_status = []
+inode_status = []
 
 exit_status = 0
 
@@ -22,10 +27,15 @@ exit_status = 0
 def constraints(line):
 
 	global block_status
+	global inode_status
+
 	global total_block
-	global first_unreserved_block
+	global total_inode
 	global block_size
 	global inode_size
+
+	global first_unreserved_block
+	global first_unreserved_inode
 	
 	fd = open(file, "r")
 	for line in fd:
@@ -38,15 +48,23 @@ def constraints(line):
 			total_inode = int(s_line[2])
 			block_size = int(s_line[3])
 			inode_size = int(s_line[4])
+			first_unreserved_inode = int(s_line[7])
 
 			# initialize blocks
 			block_status = [[(-1) for i in range(3)] for j in range(total_block)]
+
+			# initialize inodes
+			inode_status = [[-2, 0, 0] for j in range(0, first_unreserved_inode)]
+			inode_status = [[-1, 0, 0] for j in range(first_unreserved_inode, total_inode)]
 
 		elif "GROUP" in line:
 			s_line = line.split(",",9)
 			first_unreserved_block = int(line[8]) + math.ceil(float(inode_size) * total_inode / total_block)
 
 		elif "BFREE" in line:
+			s_line = line.split(",")
+			block_status[int(s_line[1])][0] = 0	
+		elif "IFREE" in line:
 			s_line = line.split(",")
 			block_status[int(s_line[1])][0] = 0		
 
@@ -58,6 +76,7 @@ def invalid_block(blcok_num, block_type, inode, offset):
 
 	exit_status = 2
 
+	invalid_inode(inode)
 	if blcok_num < 0 or blcok_num >= total_block:
 		print("INVALID {0} {1} IN INODE {2} AT OFFSET {3}".format(block_type, blcok_num, inode, offset))
 	elif blcok_num < first_unreserved_block:
@@ -74,6 +93,28 @@ def invalid_block(blcok_num, block_type, inode, offset):
 		block_status[2] = block_type
 	else:
 		exit_status = 0
+
+# not finished, should do block check and inode check here
+def parse_inode(line)
+	
+	global exit_status
+	s_line = line.split(",")
+
+	inode_num = s_line[1]
+
+# check if the inode is valid
+def invalid_inode(inode)
+	global inode_status
+	global exit_status
+
+	exit_status = 2
+	if inode_status[inode][0] == 0:
+		print("ALLOCATED INODE {0} ON FREELIST".format(inode))
+	elif inode_status[inode][0] == -1:
+		inode_status[inode][0] = 1  # not sure what to set here
+	else:
+		exit_status = 0
+
 
 # check if the previous step has visited this block
 def unreferenced blocks():
@@ -92,4 +133,9 @@ def main():
 	for files in os.listdir(root_dir):
 		for file in files:
 			if (file.endswith(".csv")):
+				for line in file:
+					if "SUPERBLOCK" in line or "GROUP" in line or "BFREE" in line or "IFREE" in line:
+						constraints(line)
+					if "INODE" in line:
+						parse_inode(line)
 
